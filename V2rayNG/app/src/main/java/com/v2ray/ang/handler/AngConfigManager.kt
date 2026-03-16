@@ -2,8 +2,10 @@ package com.v2ray.ang.handler
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.content.Intent
 import android.text.TextUtils
 import android.util.Log
+import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.AppConfig.HY2
 import com.v2ray.ang.R
@@ -21,11 +23,18 @@ import com.v2ray.ang.fmt.TrojanFmt
 import com.v2ray.ang.fmt.VlessFmt
 import com.v2ray.ang.fmt.VmessFmt
 import com.v2ray.ang.fmt.WireguardFmt
+import com.v2ray.ang.ui.SubEditActivity
 import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
+import java.io.IOException
+import java.net.HttpURLConnection
 import java.net.URI
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 object AngConfigManager {
 
@@ -523,16 +532,21 @@ object AngConfigManager {
             Log.i(AppConfig.TAG, url)
             val userAgent = it.subscription.userAgent
 
+            var isEncrypted = false
             var configText = try {
                 val httpPort = SettingsManager.getHttpPort()
-                HttpUtil.getUrlContentWithUserAgent(url, userAgent, 15000, httpPort)
+                val result = fetchSubscription(url, userAgent, 15000, httpPort)
+                isEncrypted = result.second
+                result.first
             } catch (e: Exception) {
                 Log.e(AppConfig.ANG_PACKAGE, "Update subscription: proxy not ready or other error", e)
                 ""
             }
             if (configText.isEmpty()) {
                 configText = try {
-                    HttpUtil.getUrlContentWithUserAgent(url, userAgent)
+                    val result = fetchSubscription(url, userAgent, 15000, 0)
+                    isEncrypted = result.second
+                    result.first
                 } catch (e: Exception) {
                     Log.e(AppConfig.TAG, "Update subscription: Failed to get URL content with user agent", e)
                     ""
@@ -542,7 +556,25 @@ object AngConfigManager {
                 return SubscriptionUpdateResult(failureCount = 1)
             }
 
-            val count = parseConfigViaSub(configText, it.guid, false)
+            val finalText = if (isEncrypted) {
+                val password = it.subscription.loginPassword
+                if (password.isNullOrBlank()) {
+                    Log.e(AppConfig.TAG, "Encrypted subscription requires login password")
+                    openSubscriptionEditForPassword(it.guid)
+                    return SubscriptionUpdateResult(failureCount = 1)
+                }
+                try {
+                    decryptSubscription(configText, password)
+                } catch (e: Exception) {
+                    Log.e(AppConfig.TAG, "Failed to decrypt subscription", e)
+                    openSubscriptionEditForPassword(it.guid)
+                    return SubscriptionUpdateResult(failureCount = 1)
+                }
+            } else {
+                configText
+            }
+
+            val count = parseConfigViaSub(finalText, it.guid, false)
             if (count > 0) {
                 it.subscription.lastUpdated = System.currentTimeMillis()
                 MmkvManager.encodeSubscription(it.guid, it.subscription)
@@ -558,6 +590,129 @@ object AngConfigManager {
         } catch (e: Exception) {
             Log.e(AppConfig.TAG, "Failed to update config via subscription", e)
             return SubscriptionUpdateResult(failureCount = 1)
+        }
+    }
+
+    /**
+     * 获取订阅内容，同时检查是否为加密订阅（根据 Subscription-Encryption 响应头）
+     *
+     * @return Pair<内容文本, 是否加密>
+     */
+    @Throws(IOException::class)
+    private fun fetchSubscription(
+        url: String,
+        userAgent: String?,
+        timeout: Int,
+        httpPort: Int
+    ): Pair<String, Boolean> {
+        var currentUrl: String? = url
+        var redirects = 0
+        val maxRedirects = 3
+
+        while (redirects++ < maxRedirects) {
+            if (currentUrl.isNullOrEmpty()) break
+            val conn: HttpURLConnection = HttpUtil.createProxyConnection(
+                currentUrl,
+                httpPort,
+                timeout,
+                timeout
+            ) ?: continue
+
+            val finalUserAgent = if (userAgent.isNullOrBlank()) {
+                "v2rayNG/${com.v2ray.ang.BuildConfig.VERSION_NAME}"
+            } else {
+                userAgent
+            }
+            conn.setRequestProperty("User-agent", finalUserAgent)
+            conn.connect()
+
+            val responseCode = conn.responseCode
+            when (responseCode) {
+                in 300..399 -> {
+                    val location = HttpUtil.resolveLocation(conn)
+                    conn.disconnect()
+                    if (location.isNullOrEmpty()) {
+                        throw IOException("Redirect location not found")
+                    }
+                    currentUrl = location
+                    continue
+                }
+
+                else -> {
+                    try {
+                        val body = conn.inputStream.use { it.bufferedReader().readText() }
+                        val encryptionHeader = conn.getHeaderField("Subscription-Encryption")
+                            ?.trim()
+                            ?.lowercase()
+                        val isEncrypted = encryptionHeader == "true"
+                        return Pair(body, isEncrypted)
+                    } finally {
+                        conn.disconnect()
+                    }
+                }
+            }
+        }
+        throw IOException("Too many redirects")
+    }
+
+    /**
+     * 解密加密订阅内容，算法与 v2free-for-android 保持一致：
+     * 1. 对密码做 MD5，作为 16 字节 AES 密钥
+     * 2. base64 解码数据，前 16 字节为 IV，后面为密文
+     * 3. 使用 AES/CBC/PKCS5Padding 解密
+     */
+    private fun decryptSubscription(base64Data: String, password: String): String {
+        try {
+            if (password.isBlank()) {
+                throw IllegalArgumentException(
+                    AngApplication.application.getString(R.string.subscription_login_password_required)
+                )
+            }
+            val key = MessageDigest.getInstance("MD5")
+                .digest(password.toByteArray(Charsets.UTF_8))
+            val cleaned = base64Data.trim()
+                .replace("\n", "")
+                .replace("\r", "")
+                .replace(" ", "")
+            val raw = android.util.Base64.decode(cleaned, android.util.Base64.NO_WRAP)
+            if (raw.size <= 16) {
+                throw IllegalStateException(
+                    AngApplication.application.getString(R.string.subscription_decrypt_failed)
+                )
+            }
+            val iv = raw.copyOfRange(0, 16)
+            val cipherText = raw.copyOfRange(16, raw.size)
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                SecretKeySpec(key, "AES"),
+                IvParameterSpec(iv)
+            )
+            val plain = cipher.doFinal(cipherText)
+            return String(plain, Charsets.UTF_8)
+        } catch (e: Exception) {
+            throw IllegalStateException(
+                AngApplication.application.getString(R.string.subscription_decrypt_failed),
+                e
+            )
+        }
+    }
+
+    /**
+     * 打开对应订阅的编辑界面，并在 UI 中聚焦到网站登录密码输入框。
+     * 从非 Activity 环境启动，需要使用 NEW_TASK。
+     */
+    private fun openSubscriptionEditForPassword(subId: String) {
+        try {
+            if (subId.isBlank()) return
+            val context = AngApplication.application
+            val intent = Intent(context, SubEditActivity::class.java).apply {
+                putExtra("subId", subId)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to open SubEditActivity for subscription password", e)
         }
     }
 

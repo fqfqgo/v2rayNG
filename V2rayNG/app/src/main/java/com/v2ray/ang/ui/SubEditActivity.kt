@@ -41,6 +41,18 @@ class SubEditActivity : BaseActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 如果是从解密失败或缺少密码跳转而来，且当前订阅已存在，则主动将焦点定位到网站登录密码输入框
+        if (editSubId.isNotEmpty()) {
+            binding.etLoginPassword.post {
+                binding.etLoginPassword.requestFocus()
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                imm?.showSoftInput(binding.etLoginPassword, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+    }
+
     /**
      * binding selected server config
      */
@@ -49,6 +61,7 @@ class SubEditActivity : BaseActivity() {
         binding.etUrl.text = Utils.getEditable(subItem.url)
         binding.etUserAgent.text = Utils.getEditable(subItem.userAgent)
         binding.etFilter.text = Utils.getEditable(subItem.filter)
+        binding.etLoginPassword.setText(subItem.loginPassword ?: "")
         binding.chkEnable.isChecked = subItem.enabled
         binding.autoUpdateCheck.isChecked = subItem.autoUpdate
         binding.allowInsecureUrl.isChecked = subItem.allowInsecureUrl
@@ -65,6 +78,7 @@ class SubEditActivity : BaseActivity() {
         binding.etUrl.text = null
         binding.etFilter.text = null
         binding.chkEnable.isChecked = true
+        binding.etLoginPassword.text = null
         binding.etPreProfile.text = null
         binding.etNextProfile.text = null
         return true
@@ -80,6 +94,7 @@ class SubEditActivity : BaseActivity() {
         subItem.url = binding.etUrl.text.toString()
         subItem.userAgent = binding.etUserAgent.text.toString()
         subItem.filter = binding.etFilter.text.toString()
+        subItem.loginPassword = binding.etLoginPassword.text?.toString()
         subItem.enabled = binding.chkEnable.isChecked
         subItem.autoUpdate = binding.autoUpdateCheck.isChecked
         subItem.prevProfile = binding.etPreProfile.text.toString()

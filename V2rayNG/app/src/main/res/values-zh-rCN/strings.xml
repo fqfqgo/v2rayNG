@@ -282,6 +282,10 @@
     <string name="sub_setting_pre_profile">前置代理配置别名</string>
     <string name="sub_setting_next_profile">落地代理配置別名</string>
     <string name="sub_setting_pre_profile_tip">请确保配置别名存在并唯一</string>
+    <string name="subscription_login_password">网站登录密码</string>
+    <string name="subscription_login_password_tip">请输入网站登录密码</string>
+    <string name="subscription_login_password_required">请填写网站登录密码</string>
+    <string name="subscription_decrypt_failed">订阅解密失败</string>
     <string name="title_sub_update">更新订阅</string>
     <string name="title_ping_all_server">测试配置 Tcping</string>
     <string name="title_real_ping_all_server">测试配置真连接</string>
