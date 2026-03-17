@@ -74,7 +74,7 @@ class SubEditActivity : BaseActivity() {
      * clear or init server config
      */
     private fun clearServer(): Boolean {
-        binding.etRemarks.text = null
+        binding.etRemarks.setText("v2free")
         binding.etUrl.text = null
         binding.etFilter.text = null
         binding.chkEnable.isChecked = true

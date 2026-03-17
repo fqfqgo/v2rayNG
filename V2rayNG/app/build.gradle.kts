@@ -9,7 +9,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.v2ray.ang"
+        applicationId = "com.go.v2free"
         minSdk = 24
         targetSdk = 36
         versionCode = 715

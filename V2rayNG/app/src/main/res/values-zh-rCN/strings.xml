@@ -273,7 +273,7 @@
     <string name="title_export_all">导出配置至剪贴板</string>
     <string name="title_sub_setting">订阅分组设置</string>
     <string name="sub_setting_remarks">备注</string>
-    <string name="sub_setting_url">可选地址 (url)</string>
+    <string name="sub_setting_url">订阅链接</string>
     <string name="sub_setting_user_agent">User Agent</string>
     <string name="sub_setting_filter">别名正则过滤</string>
     <string name="sub_setting_enable">启用更新</string>
@@ -283,8 +283,8 @@
     <string name="sub_setting_next_profile">落地代理配置別名</string>
     <string name="sub_setting_pre_profile_tip">请确保配置别名存在并唯一</string>
     <string name="subscription_login_password">网站登录密码</string>
-    <string name="subscription_login_password_tip">请输入网站登录密码</string>
-    <string name="subscription_login_password_required">请填写网站登录密码</string>
+    <string name="subscription_login_password_tip">请输入机场网站登录密码</string>
+    <string name="subscription_login_password_required">请填写机场网站登录密码</string>
     <string name="subscription_decrypt_failed">订阅解密失败</string>
     <string name="title_sub_update">更新订阅</string>
     <string name="title_ping_all_server">测试配置 Tcping</string>
