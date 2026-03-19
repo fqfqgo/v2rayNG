@@ -62,10 +62,11 @@
         <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
     </style>
 
-    <!-- Theme without ActionBar -->
+    <!-- Theme without ActionBar; windowBackground shows launch logo (same as app icon) -->
     <style name="AppThemeDayNight.NoActionBar" parent="AppThemeDayNight">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
+        <item name="android:windowBackground">@drawable/launch_splash</item>
     </style>
 
     <style name="AppThemeDayNight.NoActionBar.Translucent">
